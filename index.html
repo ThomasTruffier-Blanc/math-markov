@@ -1,0 +1,849 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Module Maths 2: Analyse Interactive</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
+
+        /* <!-- Chosen Palette: Warm Sand & Slate --> */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #fdfcf8; /* Warm off-white */
+            color: #334155; /* Slate 700 */
+        }
+
+        /* Custom Chart Container Class as per requirements */
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 650px; /* max-w-2xl equiv approx */
+            margin-left: auto;
+            margin-right: auto;
+            height: 350px;
+            max-height: 400px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        @media (max-width: 640px) {
+            .chart-container {
+                height: 300px;
+            }
+        }
+
+        /* Matrix Brackets styling */
+        .matrix-bracket {
+            position: relative;
+            padding: 0.5rem;
+        }
+        .matrix-bracket::before, .matrix-bracket::after {
+            content: "";
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 8px;
+            border: 2px solid #334155;
+        }
+        .matrix-bracket::before {
+            left: 0;
+            border-right: 0;
+        }
+        .matrix-bracket::after {
+            right: 0;
+            border-left: 0;
+        }
+
+        /* Hide scrollbar for clean UI */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+
+        /* Tab Transitions */
+        .tab-content {
+            display: none;
+            animation: fadeIn 0.4s ease-in-out;
+        }
+        .tab-content.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .input-num {
+            transition: all 0.2s;
+        }
+        .input-num:focus {
+            outline: none;
+            border-color: #d97706;
+            box-shadow: 0 0 0 3px rgba(217, 119, 6, 0.1);
+        }
+    </style>
+    
+    <!-- Application Structure Plan:
+         1. Architecture: A "Digital Math Lab" Dashboard. Instead of chapters, the app is divided into three functional interactive laboratories: "Matrix Operations", "Graph Algorithms", and "Markov Simulator".
+         2. Navigation: A persistent top navigation bar allows users to switch contexts instantly.
+         3. Home/Dashboard: Provides a high-level synthesis of the module (Matrices, Graphs, Probability) and their interconnectedness.
+         4. Matrix Lab: Focuses on the "mechanics". The report details operations (sums, products, inverses). The app replaces static examples with an interactive 2x2 Matrix Calculator to demonstrate A x B and Determinants in real-time, helping users intuit the algebra.
+         5. Graph Explorer: The report covers Dijkstra and Coloring. The app features a "Pathfinding Visualizer" (using HTML5 Canvas, NO SVG) where users can step through Dijkstra's algorithm to see how weights and visited nodes change, reinforcing the algorithmic logic.
+         6. Markov Simulator: The report discusses P_n = P_0 * T^n and convergence. The app uses a Chart.js Line Chart to visualize the evolution of probabilities over time, allowing users to tweak the Transition Matrix and see the "Steady State" emerge visually.
+         7. Rationale: This structure moves from abstract (Matrices) to structural (Graphs) to applied (Markov), mirroring the pedagogical flow but adding "what-if" interactivity at each stage.
+    -->
+
+    <!-- Visualization & Content Choices:
+         1. Matrix Calculator:
+            * Goal: Demystify matrix multiplication and determinants.
+            * Viz: HTML Grid Inputs + Dynamic JS Calculation.
+            * Justification: Static text describes the formula c_ij = sum(a_ik * b_kj). The interactive input allows users to *see* the result change instantly, reinforcing the calculation rules defined in the source.
+         2. Dijkstra Visualizer:
+            * Goal: Teach the Shortest Path algorithm.
+            * Viz: HTML5 Canvas (Custom drawing, NO SVG).
+            * Interaction: "Next Step" button to iterate through the algorithm.
+            * Justification: The source describes the algorithm textually. An animated Canvas drawing shows the "wavefront" of exploration, making concepts like "marking nodes" and "updating distances" concrete.
+         3. Markov Convergence Chart:
+            * Goal: Visualize the concept of a "Stationary State" (État Stable).
+            * Viz: Chart.js Line Chart (Canvas based).
+            * Interaction: Sliders to adjust initial probabilities and transition weights.
+            * Justification: The formula lim(n->inf) P_n = P is abstract. A line chart showing two lines converging to a flat asymptote proves stability visually.
+         4. Content: All text snippets, definitions, and algorithmic steps are extracted directly from the provided French source text.
+    -->
+
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+</head>
+<body class="flex flex-col min-h-screen">
+
+    <!-- Navigation -->
+    <nav class="bg-[#f4f1ea] border-b border-stone-200 sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0 flex items-center gap-2">
+                        <span class="text-2xl font-bold text-stone-800 tracking-tight">Maths<span class="text-amber-600">II</span></span>
+                        <span class="text-xs font-semibold uppercase tracking-wider text-stone-500 mt-1 ml-2 hidden sm:block">Matrices & Graphes</span>
+                    </div>
+                </div>
+                <div class="hidden sm:flex sm:space-x-8 items-center">
+                    <button onclick="switchTab('home')" id="nav-home" class="nav-item border-amber-500 text-stone-900 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors duration-200">
+                        Synthèse
+                    </button>
+                    <button onclick="switchTab('matrices')" id="nav-matrices" class="nav-item border-transparent text-stone-500 hover:border-stone-300 hover:text-stone-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors duration-200">
+                        Matrices
+                    </button>
+                    <button onclick="switchTab('graphes')" id="nav-graphes" class="nav-item border-transparent text-stone-500 hover:border-stone-300 hover:text-stone-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors duration-200">
+                        Graphes
+                    </button>
+                    <button onclick="switchTab('markov')" id="nav-markov" class="nav-item border-transparent text-stone-500 hover:border-stone-300 hover:text-stone-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors duration-200">
+                        Chaînes de Markov
+                    </button>
+                </div>
+                <!-- Mobile menu button -->
+                <div class="flex items-center sm:hidden">
+                    <button onclick="document.getElementById('mobile-menu').classList.toggle('hidden')" class="inline-flex items-center justify-center p-2 rounded-md text-stone-400 hover:text-stone-500 hover:bg-stone-100 focus:outline-none">
+                        <span class="text-xl font-bold">☰</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+        <!-- Mobile Menu -->
+        <div id="mobile-menu" class="hidden sm:hidden bg-[#f4f1ea] border-t border-stone-200">
+            <div class="pt-2 pb-3 space-y-1">
+                <button onclick="switchTab('home')" class="block pl-3 pr-4 py-2 border-l-4 border-amber-500 text-base font-medium text-amber-700 bg-amber-50 w-full text-left">Synthèse</button>
+                <button onclick="switchTab('matrices')" class="block pl-3 pr-4 py-2 border-l-4 border-transparent text-base font-medium text-stone-600 hover:bg-stone-50 hover:border-stone-300 w-full text-left">Matrices</button>
+                <button onclick="switchTab('graphes')" class="block pl-3 pr-4 py-2 border-l-4 border-transparent text-base font-medium text-stone-600 hover:bg-stone-50 hover:border-stone-300 w-full text-left">Graphes</button>
+                <button onclick="switchTab('markov')" class="block pl-3 pr-4 py-2 border-l-4 border-transparent text-base font-medium text-stone-600 hover:bg-stone-50 hover:border-stone-300 w-full text-left">Markov</button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content Area -->
+    <main class="flex-grow max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
+
+        <!-- SECTION: HOME / SYNTHÈSE -->
+        <section id="home" class="tab-content active">
+            <div class="text-center mb-12">
+                <h1 class="text-4xl font-bold text-stone-900 mb-4">Analyse Structurée : Module Maths 2</h1>
+                <p class="text-lg text-stone-600 max-w-3xl mx-auto leading-relaxed">
+                    Bienvenue dans l'interface interactive du module "Matrices et Graphes". Cette application transforme les concepts théoriques du cours en expériences visuelles. Explorez les liens entre l'algèbre linéaire, la théorie des graphes et les processus stochastiques.
+                </p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
+                <!-- Card 1 -->
+                <div class="bg-white rounded-xl shadow-sm border border-stone-100 p-6 hover:shadow-md transition-shadow cursor-pointer" onclick="switchTab('matrices')">
+                    <div class="w-12 h-12 bg-amber-100 rounded-lg flex items-center justify-center mb-4 text-amber-600 font-bold text-xl">M</div>
+                    <h2 class="text-xl font-bold text-stone-900 mb-2">Matrices</h2>
+                    <p class="text-stone-600 text-sm mb-4">
+                        Tableaux de nombres $M_{n,p}(\mathbb{R})$, opérations algébriques, déterminants et inversion. La base du calcul numérique.
+                    </p>
+                    <ul class="text-sm text-stone-500 space-y-1">
+                        <li>• Opérations ($A+B, AB$)</li>
+                        <li>• Inversion ($A^{-1}$)</li>
+                        <li>• Systèmes linéaires ($Ax=b$)</li>
+                    </ul>
+                </div>
+
+                <!-- Card 2 -->
+                <div class="bg-white rounded-xl shadow-sm border border-stone-100 p-6 hover:shadow-md transition-shadow cursor-pointer" onclick="switchTab('graphes')">
+                    <div class="w-12 h-12 bg-emerald-100 rounded-lg flex items-center justify-center mb-4 text-emerald-600 font-bold text-xl">G</div>
+                    <h2 class="text-xl font-bold text-stone-900 mb-2">Graphes</h2>
+                    <p class="text-stone-600 text-sm mb-4">
+                        Modélisation des relations. Sommets, arêtes, chemins et algorithmes d'optimisation (Dijkstra, Kruskal).
+                    </p>
+                    <ul class="text-sm text-stone-500 space-y-1">
+                        <li>• Matrices d'adjacence</li>
+                        <li>• Cycles Eulériens & Hamiltoniens</li>
+                        <li>• Plus court chemin</li>
+                    </ul>
+                </div>
+
+                <!-- Card 3 -->
+                <div class="bg-white rounded-xl shadow-sm border border-stone-100 p-6 hover:shadow-md transition-shadow cursor-pointer" onclick="switchTab('markov')">
+                    <div class="w-12 h-12 bg-sky-100 rounded-lg flex items-center justify-center mb-4 text-sky-600 font-bold text-xl">P</div>
+                    <h2 class="text-xl font-bold text-stone-900 mb-2">Chaînes de Markov</h2>
+                    <p class="text-stone-600 text-sm mb-4">
+                        Processus probabilistes sans mémoire. Étude des transitions d'états et convergence vers la stabilité.
+                    </p>
+                    <ul class="text-sm text-stone-500 space-y-1">
+                        <li>• Matrice de transition $T$</li>
+                        <li>• État probabiliste $P_n$</li>
+                        <li>• État stable $P = P \times T$</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="bg-amber-50 border border-amber-100 rounded-lg p-6">
+                <h3 class="font-bold text-amber-800 mb-2">Objectif de l'Application</h3>
+                <p class="text-amber-900/80 text-sm">
+                    Cette application vise à faciliter la compréhension par l'expérimentation. Au lieu de lire statiquement comment multiplier des matrices ou comment converge une probabilité, vous pouvez ici manipuler les données et observer les résultats en temps réel. Utilisez la navigation ci-dessus pour commencer.
+                </p>
+            </div>
+        </section>
+
+        <!-- SECTION: MATRICES -->
+        <section id="matrices" class="tab-content">
+            <div class="mb-8 border-b border-stone-200 pb-4">
+                <h2 class="text-3xl font-bold text-stone-800">L'Atelier des Matrices</h2>
+                <p class="text-stone-600 mt-2">
+                    Une matrice de type $(n,p)$ est un tableau de nombres réels. Ici, nous nous concentrons sur les matrices carrées $2 \times 2$ pour illustrer le <strong>Produit Matriciel</strong> et le <strong>Déterminant</strong>.
+                </p>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-12">
+                <!-- Interactive Calculator -->
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-stone-200">
+                    <h3 class="text-lg font-bold text-stone-800 mb-6 flex items-center">
+                        <span class="w-2 h-2 bg-amber-500 rounded-full mr-2"></span>Calculateur Interactif ($A \times B$)
+                    </h3>
+
+                    <div class="flex flex-col sm:flex-row items-center justify-center gap-4 mb-8 overflow-x-auto">
+                        <!-- Matrix A -->
+                        <div class="text-center">
+                            <div class="font-bold text-stone-400 mb-2 text-xs uppercase tracking-widest">Matrice A</div>
+                            <div class="matrix-bracket grid grid-cols-2 gap-2">
+                                <input type="number" id="a11" value="2" class="input-num w-12 h-10 text-center bg-stone-50 border border-stone-300 rounded text-stone-800 font-mono" oninput="calculateMatrix()">
+                                <input type="number" id="a12" value="1" class="input-num w-12 h-10 text-center bg-stone-50 border border-stone-300 rounded text-stone-800 font-mono" oninput="calculateMatrix()">
+                                <input type="number" id="a21" value="5" class="input-num w-12 h-10 text-center bg-stone-50 border border-stone-300 rounded text-stone-800 font-mono" oninput="calculateMatrix()">
+                                <input type="number" id="a22" value="2" class="input-num w-12 h-10 text-center bg-stone-50 border border-stone-300 rounded text-stone-800 font-mono" oninput="calculateMatrix()">
+                            </div>
+                        </div>
+
+                        <div class="text-2xl font-bold text-stone-300">×</div>
+
+                        <!-- Matrix B -->
+                        <div class="text-center">
+                            <div class="font-bold text-stone-400 mb-2 text-xs uppercase tracking-widest">Matrice B</div>
+                            <div class="matrix-bracket grid grid-cols-2 gap-2">
+                                <input type="number" id="b11" value="1" class="input-num w-12 h-10 text-center bg-stone-50 border border-stone-300 rounded text-stone-800 font-mono" oninput="calculateMatrix()">
+                                <input type="number" id="b12" value="2" class="input-num w-12 h-10 text-center bg-stone-50 border border-stone-300 rounded text-stone-800 font-mono" oninput="calculateMatrix()">
+                                <input type="number" id="b21" value="4" class="input-num w-12 h-10 text-center bg-stone-50 border border-stone-300 rounded text-stone-800 font-mono" oninput="calculateMatrix()">
+                                <input type="number" id="b22" value="-1" class="input-num w-12 h-10 text-center bg-stone-50 border border-stone-300 rounded text-stone-800 font-mono" oninput="calculateMatrix()">
+                            </div>
+                        </div>
+
+                        <div class="text-2xl font-bold text-stone-300">=</div>
+
+                        <!-- Result C -->
+                        <div class="text-center">
+                            <div class="font-bold text-amber-600 mb-2 text-xs uppercase tracking-widest">Résultat C</div>
+                            <div class="matrix-bracket grid grid-cols-2 gap-2 bg-amber-50/50">
+                                <div id="c11" class="w-12 h-10 flex items-center justify-center font-bold text-stone-800 font-mono"></div>
+                                <div id="c12" class="w-12 h-10 flex items-center justify-center font-bold text-stone-800 font-mono"></div>
+                                <div id="c21" class="w-12 h-10 flex items-center justify-center font-bold text-stone-800 font-mono"></div>
+                                <div id="c22" class="w-12 h-10 flex items-center justify-center font-bold text-stone-800 font-mono"></div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-stone-50 p-4 rounded text-sm text-stone-600 border border-stone-100">
+                        <strong class="block mb-2 text-stone-800">Détail du calcul pour $C_{1,1}$ :</strong>
+                        <span id="calc-detail" class="font-mono text-amber-700 text-base"></span>
+                    </div>
+                </div>
+
+                <!-- Theory & Properties -->
+                <div class="space-y-6">
+                    <div>
+                        <h3 class="font-bold text-stone-800 mb-2 text-lg">Propriétés Essentielles</h3>
+                        <ul class="list-disc pl-5 space-y-2 text-stone-600 text-sm leading-relaxed">
+                            <li><strong>Non-commutativité :</strong> En général, $A \times B \neq B \times A$.</li>
+                            <li><strong>Élément neutre :</strong> La matrice Identité $I_n$. $A \times I_n = A$.</li>
+                            <li><strong>Déterminant :</strong> Pour $A = \begin{pmatrix} a & b \\ c & d \end{pmatrix}$, $\det(A) = ad - bc$. Si $\det(A) \neq 0$, la matrice est inversible.</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="bg-white p-5 rounded-lg border border-stone-200 shadow-sm">
+                        <h4 class="text-xs font-bold text-stone-500 uppercase tracking-wider mb-4 border-b pb-2">Analyse Actuelle</h4>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div class="text-center">
+                                <span class="text-xs text-stone-400 font-semibold block mb-1">Det(A)</span>
+                                <div id="det-a" class="text-2xl font-bold text-stone-800 font-mono"></div>
+                            </div>
+                            <div class="text-center border-l border-stone-100">
+                                <span class="text-xs text-stone-400 font-semibold block mb-1">Det(B)</span>
+                                <div id="det-b" class="text-2xl font-bold text-stone-800 font-mono"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SECTION: GRAPHES -->
+        <section id="graphes" class="tab-content">
+            <div class="mb-8 border-b border-stone-200 pb-4">
+                <h2 class="text-3xl font-bold text-stone-800">Le Labo des Graphes</h2>
+                <p class="text-stone-600 mt-2">
+                    Visualisation de l'algorithme de <strong>Dijkstra</strong>. Un graphe est composé de sommets (noeuds) et d'arêtes (liens) pondérées. L'objectif est de trouver le chemin le plus court entre le point de départ <span class="font-bold text-emerald-600">S</span> et l'arrivée <span class="font-bold text-red-600">E</span>.
+                </p>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <!-- Visualizer -->
+                <div class="lg:col-span-2 bg-white rounded-xl shadow-sm border border-stone-200 p-1 relative flex flex-col items-center">
+                    <div class="absolute top-4 left-4 z-10 flex space-x-2">
+                        <button onclick="resetDijkstra()" class="bg-stone-100 hover:bg-stone-200 text-stone-600 px-3 py-1 rounded text-sm font-medium transition-colors border border-stone-300">Réinitialiser</button>
+                        <button onclick="stepDijkstra()" id="btn-step" class="bg-amber-500 hover:bg-amber-600 text-white px-3 py-1 rounded text-sm font-medium transition-colors shadow-sm">Étape Suivante</button>
+                    </div>
+                    <!-- Chart Container for Canvas (Graph Viz) -->
+                    <div class="chart-container">
+                        <canvas id="graphCanvas"></canvas>
+                    </div>
+                </div>
+
+                <!-- Explanation Panel -->
+                <div class="bg-stone-50 p-6 rounded-xl border border-stone-100 h-full flex flex-col">
+                    <h3 class="font-bold text-stone-800 mb-4 text-lg">État de l'Algorithme</h3>
+                    <div id="dijkstra-status" class="space-y-3 flex-grow overflow-y-auto max-h-60 pr-2 custom-scrollbar">
+                        <p class="text-sm text-stone-600 italic bg-white p-2 rounded border border-stone-200">Cliquez sur "Étape Suivante" pour lancer l'algorithme.</p>
+                    </div>
+
+                    <div class="mt-8 border-t border-stone-200 pt-4">
+                        <h4 class="font-bold text-xs text-stone-500 uppercase tracking-wider mb-2">Concepts Clés</h4>
+                        <ul class="text-sm space-y-2 text-stone-600">
+                            <li><strong class="text-stone-800">Poids :</strong> Le coût de traversée d'une arête (distance, temps).</li>
+                            <li><strong class="text-stone-800">Chaîne :</strong> Une suite d'arêtes consécutives.</li>
+                            <li><strong class="text-stone-800">Cycle :</strong> Chaîne dont les extrémités sont confondues.</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SECTION: MARKOV -->
+        <section id="markov" class="tab-content">
+            <div class="mb-8 border-b border-stone-200 pb-4">
+                <h2 class="text-3xl font-bold text-stone-800">Simulateur de Markov</h2>
+                <p class="text-stone-600 mt-2">
+                    Une chaîne de Markov est un processus "sans mémoire". L'état futur ne dépend que de l'état présent. La formule clé est $P_{n+1} = P_n \times T$. Observez comment les probabilités convergent vers un <strong>État Stable</strong>.
+                </p>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <!-- Controls -->
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-stone-200 lg:col-span-1">
+                    <h3 class="font-bold text-stone-800 mb-4 text-lg">Paramètres de Transition</h3>
+                    
+                    <div class="mb-6">
+                        <label class="block text-xs font-bold text-stone-500 uppercase mb-2 tracking-wide">Matrice de Transition $T$</label>
+                        <div class="grid grid-cols-2 gap-3 text-center text-sm">
+                            <div class="p-3 bg-stone-50 border border-stone-200 rounded-lg">
+                                <span class="block text-stone-400 text-xs mb-1">A vers A</span>
+                                <input type="number" id="t-aa" value="0.9" step="0.05" min="0" max="1" class="w-full text-center bg-transparent font-bold text-amber-600 outline-none text-lg" onchange="updateMarkov()">
+                            </div>
+                            <div class="p-3 bg-stone-50 border border-stone-200 rounded-lg">
+                                <span class="block text-stone-400 text-xs mb-1">A vers B</span>
+                                <span id="t-ab" class="block font-bold text-stone-500 text-lg">0.1</span>
+                            </div>
+                            <div class="p-3 bg-stone-50 border border-stone-200 rounded-lg">
+                                <span class="block text-stone-400 text-xs mb-1">B vers A</span>
+                                <input type="number" id="t-ba" value="0.2" step="0.05" min="0" max="1" class="w-full text-center bg-transparent font-bold text-emerald-600 outline-none text-lg" onchange="updateMarkov()">
+                            </div>
+                            <div class="p-3 bg-stone-50 border border-stone-200 rounded-lg">
+                                <span class="block text-stone-400 text-xs mb-1">B vers B</span>
+                                <span id="t-bb" class="block font-bold text-stone-500 text-lg">0.8</span>
+                            </div>
+                        </div>
+                        <p class="text-xs text-stone-400 mt-2 italic">* La somme des lignes doit valoir 1.</p>
+                    </div>
+
+                    <div class="mb-6 pt-4 border-t border-stone-100">
+                        <label class="block text-xs font-bold text-stone-500 uppercase mb-2 tracking-wide">État Initial $P_0$</label>
+                        <div class="flex items-center gap-3">
+                            <span class="text-sm font-bold text-amber-600 whitespace-nowrap w-12">A: <span id="p0-a-val">0.6</span></span>
+                            <input type="range" id="p0-slider" min="0" max="1" step="0.1" value="0.6" class="flex-grow h-2 bg-stone-200 rounded-lg appearance-none cursor-pointer accent-amber-500" oninput="updateMarkov()">
+                            <span class="text-sm font-bold text-emerald-600 whitespace-nowrap w-12 text-right">B: <span id="p0-b-val">0.4</span></span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Visualization -->
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-stone-200 lg:col-span-2 flex flex-col justify-center">
+                    <h3 class="font-bold text-stone-800 mb-2 ml-2 text-lg">Convergence des Probabilités ($P_n$)</h3>
+                    <!-- Chart Container -->
+                    <div class="chart-container">
+                        <canvas id="markovChart"></canvas>
+                    </div>
+                    <div class="mt-4 text-center">
+                        <span class="inline-block px-3 py-1 bg-amber-50 text-amber-800 text-xs rounded-full font-bold border border-amber-100 mr-2">
+                            État Stable estimé (A): <span id="stable-a">--</span>
+                        </span>
+                        <span class="inline-block px-3 py-1 bg-emerald-50 text-emerald-800 text-xs rounded-full font-bold border border-emerald-100">
+                            État Stable estimé (B): <span id="stable-b">--</span>
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-white border-t border-stone-200 mt-auto">
+        <div class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+            <p class="text-center text-sm text-stone-400">
+                Généré à partir du Module Maths 2: Matrices et graphes. 
+                <span class="block sm:inline">Application à but éducatif.</span>
+            </p>
+        </div>
+    </footer>
+
+    <!-- LOGIC -->
+    <script>
+        // --- NAVIGATION STATE ---
+        function switchTab(tabId) {
+            // Hide all tabs
+            document.querySelectorAll('.tab-content').forEach(el => {
+                el.classList.remove('active');
+            });
+            // Show selected tab
+            document.getElementById(tabId).classList.add('active');
+
+            // Update nav styling
+            document.querySelectorAll('.nav-item').forEach(el => {
+                el.classList.remove('border-amber-500', 'text-stone-900');
+                el.classList.add('border-transparent', 'text-stone-500');
+            });
+            const activeNav = document.getElementById('nav-' + tabId);
+            if(activeNav) {
+                activeNav.classList.remove('border-transparent', 'text-stone-500');
+                activeNav.classList.add('border-amber-500', 'text-stone-900');
+            }
+
+            // Trigger redraws if necessary (canvas sizing fix)
+            if (tabId === 'graphes') {
+                setTimeout(drawGraph, 50);
+            }
+        }
+
+        // --- SECTION 1: MATRICES LOGIC ---
+        function calculateMatrix() {
+            // Get inputs
+            const a11 = parseFloat(document.getElementById('a11').value) || 0;
+            const a12 = parseFloat(document.getElementById('a12').value) || 0;
+            const a21 = parseFloat(document.getElementById('a21').value) || 0;
+            const a22 = parseFloat(document.getElementById('a22').value) || 0;
+
+            const b11 = parseFloat(document.getElementById('b11').value) || 0;
+            const b12 = parseFloat(document.getElementById('b12').value) || 0;
+            const b21 = parseFloat(document.getElementById('b21').value) || 0;
+            const b22 = parseFloat(document.getElementById('b22').value) || 0;
+
+            // Calculate C = A * B
+            // c11 = a11*b11 + a12*b21
+            const c11 = (a11 * b11) + (a12 * b21);
+            const c12 = (a11 * b12) + (a12 * b22);
+            const c21 = (a21 * b11) + (a22 * b21);
+            const c22 = (a21 * b12) + (a22 * b22);
+
+            // Update UI
+            document.getElementById('c11').innerText = parseFloat(c11.toFixed(2));
+            document.getElementById('c12').innerText = parseFloat(c12.toFixed(2));
+            document.getElementById('c21').innerText = parseFloat(c21.toFixed(2));
+            document.getElementById('c22').innerText = parseFloat(c22.toFixed(2));
+
+            // Update Detail
+            const detailHtml = `${a11} × ${b11} + ${a12} × ${b21} = <span class="font-bold border-b-2 border-amber-400">${c11}</span>`;
+            document.getElementById('calc-detail').innerHTML = detailHtml;
+
+            // Determinants
+            const detA = (a11 * a22) - (a12 * a21);
+            const detB = (b11 * b22) - (b12 * b21);
+            document.getElementById('det-a').innerText = parseFloat(detA.toFixed(2));
+            document.getElementById('det-b').innerText = parseFloat(detB.toFixed(2));
+        }
+
+        // --- SECTION 2: GRAPH (DIJKSTRA) LOGIC (CANVAS) ---
+        const canvas = document.getElementById('graphCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Define Graph Data (Based on example in PDF)
+        const nodes = {
+            'S': {x: 100, y: 200, label: 'S'},
+            'A': {x: 250, y: 100, label: 'A'},
+            'B': {x: 250, y: 300, label: 'B'},
+            'I': {x: 400, y: 200, label: 'I'},
+            'E': {x: 550, y: 200, label: 'E'} // End
+        };
+
+        const edges = [
+            {from: 'S', to: 'A', weight: 12},
+            {from: 'S', to: 'B', weight: 9},
+            {from: 'A', to: 'I', weight: 30},
+            {from: 'B', to: 'I', weight: 25},
+            {from: 'B', to: 'A', weight: 5},
+            {from: 'I', to: 'E', weight: 16},
+            {from: 'A', to: 'E', weight: 40} // Added shortcut for complexity simulation based on visual graph
+        ];
+
+        let dijkstraState = {
+            step: 0,
+            distances: {},
+            visited: [],
+            current: null
+        };
+
+        function resizeCanvas() {
+            // Make canvas high res
+            const dpr = window.devicePixelRatio || 1;
+            const container = canvas.parentElement;
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+            
+            canvas.width = width * dpr;
+            canvas.height = height * dpr;
+            
+            // Normalize internal scaling to a 800x400 grid for simplicity of coords
+            const scaleX = (width * dpr) / 650;
+            const scaleY = (height * dpr) / 400;
+            
+            ctx.setTransform(1, 0, 0, 1, 0, 0); // Reset
+            ctx.scale(scaleX, scaleY); 
+            drawGraph();
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+
+        function drawGraph() {
+            // Clear
+            ctx.clearRect(0, 0, 800, 600); // Clear large area (logical coords)
+
+            // Draw Edges
+            edges.forEach(edge => {
+                const start = nodes[edge.from];
+                const end = nodes[edge.to];
+                
+                ctx.beginPath();
+                ctx.moveTo(start.x, start.y);
+                ctx.lineTo(end.x, end.y);
+                
+                // Color logic
+                let strokeStyle = '#cbd5e1'; // Default slate-300
+                let lineWidth = 2;
+
+                // Simple visual highlight if both nodes are visited
+                if (dijkstraState.visited.includes(edge.from) && dijkstraState.visited.includes(edge.to)) {
+                   strokeStyle = '#94a3b8'; // Darker slate
+                }
+                
+                ctx.strokeStyle = strokeStyle;
+                ctx.lineWidth = lineWidth;
+                ctx.stroke();
+
+                // Weight Label
+                const midX = (start.x + end.x) / 2;
+                const midY = (start.y + end.y) / 2;
+                ctx.fillStyle = '#fff';
+                ctx.beginPath();
+                ctx.arc(midX, midY, 12, 0, 2*Math.PI);
+                ctx.fill();
+                ctx.strokeStyle = '#e2e8f0';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+                
+                ctx.fillStyle = '#64748b';
+                ctx.font = '12px Inter';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(edge.weight, midX, midY);
+            });
+
+            // Draw Nodes
+            for (let id in nodes) {
+                const node = nodes[id];
+                
+                ctx.beginPath();
+                ctx.arc(node.x, node.y, 25, 0, 2 * Math.PI);
+                
+                // Fill logic
+                if (id === dijkstraState.current) {
+                    ctx.fillStyle = '#f59e0b'; // Amber 500 (Current)
+                } else if (dijkstraState.visited.includes(id)) {
+                    ctx.fillStyle = '#10b981'; // Emerald 500 (Visited)
+                } else {
+                    ctx.fillStyle = '#fff'; // Default
+                }
+                
+                ctx.fill();
+                
+                // Stroke logic
+                ctx.strokeStyle = (id === 'S' || id === 'E') ? '#334155' : '#94a3b8';
+                ctx.lineWidth = 3;
+                ctx.stroke();
+
+                // Node Label
+                ctx.fillStyle = (id === dijkstraState.current || dijkstraState.visited.includes(id)) ? '#fff' : '#334155';
+                ctx.font = 'bold 16px Inter';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(node.label, node.x, node.y);
+
+                // Distance Label (Above node)
+                const dist = dijkstraState.distances[id];
+                const distText = dist === Infinity ? '∞' : dist;
+                ctx.fillStyle = '#0f172a';
+                ctx.font = 'bold 14px Inter';
+                ctx.fillText(distText, node.x, node.y - 35);
+            }
+        }
+
+        function resetDijkstra() {
+            dijkstraState = {
+                step: 0,
+                distances: {},
+                visited: [],
+                current: null
+            };
+            // Init distances
+            for (let id in nodes) dijkstraState.distances[id] = Infinity;
+            dijkstraState.distances['S'] = 0;
+            
+            document.getElementById('dijkstra-status').innerHTML = '<p class="text-sm text-stone-600 bg-white p-2 rounded border border-stone-200">Initialisation : Distance(S) = 0, autres = ∞.</p>';
+            document.getElementById('btn-step').disabled = false;
+            document.getElementById('btn-step').innerText = "Étape Suivante";
+            document.getElementById('btn-step').classList.remove('opacity-50', 'cursor-not-allowed');
+            
+            drawGraph();
+        }
+
+        function stepDijkstra() {
+            const { distances, visited } = dijkstraState;
+            
+            // Find unvisited node with smallest distance
+            let u = null;
+            let min = Infinity;
+            for (let id in nodes) {
+                if (!visited.includes(id) && distances[id] < min) {
+                    min = distances[id];
+                    u = id;
+                }
+            }
+
+            if (u === null) {
+                // Done or no path
+                dijkstraState.current = null;
+                const statusEl = document.getElementById('dijkstra-status');
+                const newItem = document.createElement('p');
+                newItem.className = "text-sm font-bold text-emerald-600 mt-2 bg-emerald-50 p-2 rounded border border-emerald-100";
+                newItem.innerText = "Algorithme terminé !";
+                statusEl.insertBefore(newItem, statusEl.firstChild);
+
+                document.getElementById('btn-step').disabled = true;
+                document.getElementById('btn-step').innerText = "Terminé";
+                document.getElementById('btn-step').classList.add('opacity-50', 'cursor-not-allowed');
+                drawGraph();
+                return;
+            }
+
+            dijkstraState.current = u;
+            dijkstraState.visited.push(u);
+
+            // Update neighbors
+            let updates = [];
+            edges.forEach(edge => {
+                if (edge.from === u) {
+                    let v = edge.to;
+                    if (!visited.includes(v)) {
+                        let alt = distances[u] + edge.weight;
+                        if (alt < distances[v]) {
+                            distances[v] = alt;
+                            updates.push(`${v} (${alt})`);
+                        }
+                    }
+                }
+            });
+
+            // Status Text
+            let msg = `Visite de <strong>${u}</strong>. `;
+            if(updates.length > 0) msg += `Mise à jour : ${updates.join(', ')}.`;
+            else msg += `Pas de mise à jour.`;
+            
+            const statusEl = document.getElementById('dijkstra-status');
+            const newItem = document.createElement('div');
+            newItem.className = "text-sm text-stone-600 bg-white p-2 rounded border border-stone-100 mb-2 shadow-sm";
+            newItem.innerHTML = msg;
+            statusEl.insertBefore(newItem, statusEl.firstChild);
+            
+            drawGraph();
+            dijkstraState.step++;
+        }
+
+        // --- SECTION 3: MARKOV LOGIC (CHART.JS) ---
+        let markovChart = null;
+
+        function initMarkovChart() {
+            const ctxM = document.getElementById('markovChart').getContext('2d');
+            markovChart = new Chart(ctxM, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [
+                        {
+                            label: 'État A',
+                            borderColor: '#d97706', // Amber 600
+                            backgroundColor: 'rgba(217, 119, 6, 0.1)',
+                            data: [],
+                            tension: 0.3,
+                            fill: false,
+                            pointRadius: 2
+                        },
+                        {
+                            label: 'État B',
+                            borderColor: '#10b981', // Emerald 500
+                            backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                            data: [],
+                            tension: 0.3,
+                            fill: false,
+                            pointRadius: 2
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            min: 0,
+                            max: 1,
+                            title: { display: true, text: 'Probabilité' }
+                        },
+                        x: {
+                            title: { display: true, text: 'Étapes (n)' }
+                        }
+                    },
+                    plugins: {
+                        legend: { position: 'top' },
+                        tooltip: { mode: 'index', intersect: false }
+                    }
+                }
+            });
+            updateMarkov();
+        }
+
+        function updateMarkov() {
+            // Inputs
+            const tAA = parseFloat(document.getElementById('t-aa').value);
+            const tBA = parseFloat(document.getElementById('t-ba').value);
+            
+            // Constraints
+            const tAB = parseFloat((1 - tAA).toFixed(2));
+            const tBB = parseFloat((1 - tBA).toFixed(2));
+            
+            // Update UI Readonlys
+            document.getElementById('t-ab').innerText = tAB;
+            document.getElementById('t-bb').innerText = tBB;
+
+            // Initial State
+            const p0A = parseFloat(document.getElementById('p0-slider').value);
+            const p0B = parseFloat((1 - p0A).toFixed(2));
+            
+            document.getElementById('p0-a-val').innerText = p0A;
+            document.getElementById('p0-b-val').innerText = p0B;
+
+            // Simulation (n=0 to 15)
+            const steps = 15;
+            let currentA = p0A;
+            let currentB = p0B;
+            
+            let dataA = [currentA];
+            let dataB = [currentB];
+            let labels = [0];
+
+            for (let i = 1; i <= steps; i++) {
+                // P_n+1 = P_n * T
+                // nextA = prevA * T_AA + prevB * T_BA
+                // nextB = prevA * T_AB + prevB * T_BB
+                let nextA = (currentA * tAA) + (currentB * tBA);
+                let nextB = (currentA * tAB) + (currentB * tBB);
+                
+                dataA.push(nextA);
+                dataB.push(nextB);
+                labels.push(i);
+                
+                currentA = nextA;
+                currentB = nextB;
+            }
+
+            // Update Chart
+            markovChart.data.labels = labels;
+            markovChart.data.datasets[0].data = dataA;
+            markovChart.data.datasets[1].data = dataB;
+            markovChart.update();
+
+            // Estimate Stable State (Solving system manually or just taking last value)
+            // System: x = x*TAA + y*TBA, x+y=1 -> x = x*TAA + (1-x)*TBA -> x = xTAA + TBA - xTBA -> x(1 - TAA + TBA) = TBA -> x = TBA / (1 - TAA + TBA)
+            const denominator = (1 - tAA + tBA);
+            let stableA, stableB;
+            
+            if (denominator !== 0) {
+                 stableA = tBA / denominator;
+                 stableB = 1 - stableA;
+                 document.getElementById('stable-a').innerText = stableA.toFixed(3);
+                 document.getElementById('stable-b').innerText = stableB.toFixed(3);
+            } else {
+                 document.getElementById('stable-a').innerText = "Indéfini";
+                 document.getElementById('stable-b').innerText = "Indéfini";
+            }
+        }
+
+        // --- INITIALIZATION ---
+        document.addEventListener('DOMContentLoaded', () => {
+            calculateMatrix();
+            resizeCanvas();
+            resetDijkstra();
+            initMarkovChart();
+        });
+
+    </script>
+</body>
+</html>
